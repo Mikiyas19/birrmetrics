@@ -1,0 +1,44 @@
+# ==================== Environment & Secrets ====================
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# ==================== Go (backend) ====================
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
+backend/bin/
+backend/dist/
+backend/*.test
+backend/*.out
+backend/coverage.*
+backend/tmp/
+
+# ==================== IDE / Editors ====================
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*.sublime-*
+
+# ==================== OS Junk ====================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==================== Logs / Temp ====================
+*.log
+logs/
+tmp/
+
+# ==================== Generated / Local Infra ====================
+infra/docker/data/
+*.local

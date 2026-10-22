@@ -1,0 +1,71 @@
+name: birrmetrics
+description: "BirrMetrics — Understand your Birr. Adaptive budgeting & expense tracker."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management & DI
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing
+  go_router: ^14.2.7
+
+  # Networking
+  dio: ^5.7.0
+
+  # Local storage
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  path_provider: ^2.1.4
+  flutter_secure_storage: ^10.0.0   # <-- UPGRADED to fix Android build compatibility
+
+  # Config
+  flutter_dotenv: ^5.2.1
+
+  # UI
+  google_fonts: ^7.0.2
+  fl_chart: ^0.69.0
+  shimmer: ^3.0.0
+
+  # Notifications & background
+  flutter_local_notifications: ^17.2.3
+  workmanager: ^0.10.10             # <-- UPGRADED to fix WorkmanagerPlugin Java error
+  timezone: ^0.9.4
+
+  # Utilities
+  intl: ^0.19.0
+  uuid: ^4.5.1
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+  collection: ^1.18.0
+
+  # Platform
+  package_info_plus: ^8.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+  # Codegen
+  build_runner: ^2.4.12
+  freezed: ^2.5.8
+  json_serializable: ^6.8.0
+  riverpod_generator: ^2.4.3
+  custom_lint: ^0.7.3
+  riverpod_lint: ^2.3.13
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/images/
+    - assets/icons/
