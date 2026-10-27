@@ -19,20 +19,13 @@ class DailySpikeRule extends InsightRule {
     final todaySpend = context.monthExpenses
         .where((e) => DateTime(e.expenseDate.year, e.expenseDate.month, e.expenseDate.day) == today)
         .fold<int>(0, (s, e) => s + e.amountSantim);
-    final activeDays = context.monthExpenses
-        .map((e) => DateTime(e.expenseDate.year, e.expenseDate.month, e.expenseDate.day))
-        .toSet()
-        .length;
-    return '$todaySpend-$activeDays';
+    return '$todaySpend-${context.activeDaysInMonth}';
   }
 
   @override
   List<Insight> evaluate(InsightContext context) {
-    final activeDays = context.monthExpenses
-        .map((e) => DateTime(e.expenseDate.year, e.expenseDate.month, e.expenseDate.day))
-        .toSet()
-        .length;
-    if (activeDays < 3) return [];
+    // Require at least 3 active days of history
+    if (context.activeDaysInMonth < 3) return [];
 
     final today = DateTime(context.now.year, context.now.month, context.now.day);
     final todaySpend = context.monthExpenses
@@ -40,15 +33,18 @@ class DailySpikeRule extends InsightRule {
         .fold<int>(0, (s, e) => s + e.amountSantim);
     if (todaySpend == 0) return [];
 
+    // Get expenses before today to compute the historical average
     final previousExpenses = context.monthExpenses
         .where((e) => DateTime(e.expenseDate.year, e.expenseDate.month, e.expenseDate.day) != today)
         .toList();
     if (previousExpenses.isEmpty) return [];
 
-    final prevActiveDays = previousExpenses
-        .map((e) => DateTime(e.expenseDate.year, e.expenseDate.month, e.expenseDate.day))
-        .toSet()
-        .length;
+    // Calculate active days before today
+    final firstPreviousExpense = previousExpenses
+        .map((e) => e.expenseDate)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final prevActiveDays = today.difference(firstPreviousExpense).inDays + 1;
+
     if (prevActiveDays < 2) return [];
 
     final prevTotal = previousExpenses.fold<int>(0, (s, e) => s + e.amountSantim);
@@ -62,7 +58,7 @@ class DailySpikeRule extends InsightRule {
         severity: InsightSeverity.warning,
         title: 'Spending spike today',
         message: 'You\'ve spent ${MoneyFormatter.formatSantim(todaySpend)} today — '
-            'more than double your previous average of ${MoneyFormatter.formatSantim(avgBefore.round())}/day.',
+            'more than double your recent average of ${MoneyFormatter.formatSantim(avgBefore.round())}/day.',
         triggeredAt: DateTime.now(),
       ),
     ];

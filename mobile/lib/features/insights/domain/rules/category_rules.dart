@@ -3,20 +3,30 @@ import 'package:birrmetrics/features/insights/domain/entities/insight.dart';
 import 'package:birrmetrics/features/insights/domain/rules/insight_context.dart';
 import 'package:birrmetrics/features/insights/domain/rules/insight_rule.dart';
 
-/// Fires when a single category dominates spending (>40%).
 class TopCategoryRule extends InsightRule {
   @override
   String get key => 'TOP_CATEGORY_OVER_40';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (ctx.totalSpentThisMonth == 0) return [];
-    final top = ctx.spendByCategory.entries.reduce(
+  String get dedupeWindow => 'once_per_week';
+
+  @override
+  String getDataSignature(InsightContext context) {
+    return '${context.totalSpentThisMonth}-${context.spendByCategory.values.fold(0, (a, b) => a + b)}';
+  }
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    // NEW: Require at least 3 active days
+    if (!context.hasEnoughData(minDays: 3)) return [];
+    if (context.totalSpentThisMonth == 0) return [];
+
+    final top = context.spendByCategory.entries.reduce(
           (a, b) => a.value > b.value ? a : b,
     );
-    final pct = (top.value / ctx.totalSpentThisMonth) * 100;
+    final pct = (top.value / context.totalSpentThisMonth) * 100;
     if (pct < 40) return [];
-    final catName = ctx.categoryNames[top.key] ?? 'Unknown';
+    final catName = context.categoryNames[top.key] ?? 'Unknown';
     return [
       Insight(
         ruleKey: key,
@@ -30,7 +40,6 @@ class TopCategoryRule extends InsightRule {
   }
 }
 
-/// Fires when a category has a spike this week vs. 4-week average.
 class CategorySpikeRule extends InsightRule {
   @override
   String get key => 'CATEGORY_SPIKE';
@@ -39,23 +48,25 @@ class CategorySpikeRule extends InsightRule {
   String get dedupeWindow => 'once_per_week';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (ctx.lastMonthExpenses.isEmpty) return [];
-    // Compute last week's spend per category
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    // Requires actual last month data
+    if (context.lastMonthExpenses.isEmpty) return [];
     final lastWeekByCat = <int, int>{};
-    for (final e in ctx.last7DaysExpenses) {
+    for (final e in context.last7DaysExpenses) {
       lastWeekByCat[e.categoryId] = (lastWeekByCat[e.categoryId] ?? 0) + e.amountSantim;
     }
-    // Compute 4-week average per category from last month
     final lastMonthByCat = <int, int>{};
-    for (final e in ctx.lastMonthExpenses) {
+    for (final e in context.lastMonthExpenses) {
       lastMonthByCat[e.categoryId] = (lastMonthByCat[e.categoryId] ?? 0) + e.amountSantim;
     }
 
     for (final entry in lastWeekByCat.entries) {
       final monthAvg = (lastMonthByCat[entry.key] ?? 0) / 4;
       if (monthAvg > 0 && entry.value > monthAvg * 2) {
-        final catName = ctx.categoryNames[entry.key] ?? 'Unknown';
+        final catName = context.categoryNames[entry.key] ?? 'Unknown';
         return [
           Insight(
             ruleKey: key,
@@ -72,7 +83,6 @@ class CategorySpikeRule extends InsightRule {
   }
 }
 
-/// Fires when user has never logged a category they just used.
 class NewCategoryRule extends InsightRule {
   @override
   String get key => 'NEW_CATEGORY_USED';
@@ -81,10 +91,12 @@ class NewCategoryRule extends InsightRule {
   String get dedupeWindow => 'once_per_day';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    // Only fire if this month has exactly ONE expense (first-ever in a new category)
-    if (ctx.monthExpenses.length != 1) return [];
-    final catName = ctx.categoryNames[ctx.monthExpenses.first.categoryId] ?? 'Unknown';
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    if (context.monthExpenses.length != 1) return [];
+    final catName = context.categoryNames[context.monthExpenses.first.categoryId] ?? 'Unknown';
     return [
       Insight(
         ruleKey: key,
@@ -97,7 +109,6 @@ class NewCategoryRule extends InsightRule {
   }
 }
 
-/// Fires when "Other" category is heavy (>25% of spend).
 class HeavyUncategorizedRule extends InsightRule {
   @override
   String get key => 'UNCATEGORIZED_HEAVY';
@@ -106,19 +117,21 @@ class HeavyUncategorizedRule extends InsightRule {
   String get dedupeWindow => 'once_per_week';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (ctx.totalSpentThisMonth == 0) return [];
-    // Find "Other" category id
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    if (context.totalSpentThisMonth == 0) return [];
     int? otherId;
-    for (final entry in ctx.categoryNames.entries) {
+    for (final entry in context.categoryNames.entries) {
       if (entry.value.toLowerCase() == 'other') {
         otherId = entry.key;
         break;
       }
     }
     if (otherId == null) return [];
-    final otherSpend = ctx.spendByCategory[otherId] ?? 0;
-    final pct = (otherSpend / ctx.totalSpentThisMonth) * 100;
+    final otherSpend = context.spendByCategory[otherId] ?? 0;
+    final pct = (otherSpend / context.totalSpentThisMonth) * 100;
     if (pct < 25) return [];
     return [
       Insight(
@@ -126,7 +139,7 @@ class HeavyUncategorizedRule extends InsightRule {
         severity: InsightSeverity.info,
         title: 'Lots of "Other" expenses',
         message: '${pct.toStringAsFixed(0)}% of your spending is in "Other" '
-            '(${MoneyFormatter.formatSantim(otherSpend)}). Try creating more specific categories for better insights.',
+            '(${MoneyFormatter.formatSantim(otherSpend)}). Try creating more specific categories.',
         triggeredAt: DateTime.now(),
       ),
     ];

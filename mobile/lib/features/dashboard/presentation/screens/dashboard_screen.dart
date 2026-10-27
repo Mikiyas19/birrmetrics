@@ -9,7 +9,9 @@ import 'package:birrmetrics/features/debts/presentation/providers/debt_providers
 import 'package:birrmetrics/features/expenses/presentation/providers/expense_providers.dart';
 import 'package:birrmetrics/features/expenses/presentation/screens/add_expense_sheet.dart';
 import 'package:birrmetrics/features/insights/domain/engine/insight_engine.dart';
+import 'package:birrmetrics/features/insights/domain/entities/insight.dart';
 import 'package:birrmetrics/features/insights/domain/rules/insight_context.dart';
+import 'package:birrmetrics/features/insights/domain/rules/rule_registry.dart';
 import 'package:birrmetrics/features/insights/presentation/providers/insight_providers.dart';
 import 'package:birrmetrics/features/insights/presentation/widgets/insight_feed.dart';
 
@@ -93,9 +95,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final newInsights = engine.evaluate(ctx);
 
       if (newInsights.isNotEmpty) {
-        await ref.read(insightsProvider.notifier).addInsights(newInsights);
+        // Enrich insights with data signatures for the engine's deduplication
+        final signatureMap = <String, String>{};
+        for (final rule in allInsightRules) {
+          signatureMap[rule.key] = rule.getDataSignature(ctx);
+        }
+
+        final enriched = newInsights.map((i) => Insight(
+          ruleKey: i.ruleKey,
+          severity: i.severity,
+          title: i.title,
+          message: i.message,
+          payload: {...(i.payload ?? {}), '_sig': signatureMap[i.ruleKey] ?? ''},
+          isRead: i.isRead,
+          triggeredAt: i.triggeredAt,
+          expiresAt: i.expiresAt,
+        )).toList();
+
+        await ref.read(insightsProvider.notifier).addInsights(enriched);
       }
 
+      // Cleanup stale "Welcome" insight when it's no longer the first expense
       final newKeys = newInsights.map((i) => i.ruleKey).toSet();
       for (final old in existingInsights) {
         if (old.ruleKey == 'FIRST_EXPENSE' && !newKeys.contains('FIRST_EXPENSE')) {
@@ -112,6 +132,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final expenseState = ref.watch(expensesProvider);
     final insightsAsync = ref.watch(insightsProvider);
 
+    // Re-evaluate when expenses or debts change
     ref.listen(expensesProvider, (previous, next) {
       if (next.list is AsyncData && previous?.list != next.list) {
         _evaluateInsights();
@@ -137,11 +158,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
       ),
-      // SafeArea ensures the content doesn't go under the status bar or bottom navigation
       body: SafeArea(
         child: ListView(
-          // Increased padding to 120 to ensure the FAB (which is ~56px high)
-          // plus margin doesn't overlap the last item.
           padding: const EdgeInsets.only(
             left: AppSpacing.md,
             right: AppSpacing.md,
@@ -149,13 +167,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             bottom: 120,
           ),
           children: [
+            // 1. Insight Feed
             insightsAsync.when(
               data: (insights) => InsightFeed(insights: insights),
               loading: () => const SizedBox.shrink(),
               error: (_, __) => const SizedBox.shrink(),
             ),
+
+            // 2. Budget Progress Card
             const BudgetProgressCard(),
             const SizedBox(height: AppSpacing.lg),
+
+            // 3. Total Spent Summary
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
@@ -183,9 +206,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+
+            // 4. Recent Transactions
             Text('Recent Transactions',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: AppSpacing.md),
+
             expenseState.list.when(
               data: (expenses) =>
                   RecentExpensesList(expenses: expenses, shrinkWrap: true),

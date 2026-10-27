@@ -78,17 +78,23 @@ class SavingsOpportunityRule extends InsightRule {
   @override
   Duration? get expiresIn => const Duration(days: 7);
 
+  // Signature includes total spent so it re-fires when spending grows
   @override
-  String getDataSignature(InsightContext context) => '';
+  String getDataSignature(InsightContext context) {
+    return '${context.totalSpentThisMonth}';
+  }
 
   @override
   List<Insight> evaluate(InsightContext context) {
-    if (context.spendByCategory.isEmpty || context.totalSpentThisMonth < 5000) return [];
+    // NEW: Require at least 7 active days AND at least 500 ETB spent
+    if (!context.hasEnoughData(minDays: 7, minSpentSantim: 50000)) return [];
+    if (context.spendByCategory.isEmpty) return [];
+
     final top = context.spendByCategory.entries.reduce(
           (a, b) => a.value > b.value ? a : b,
     );
     final savings = (top.value * 0.2).round();
-    if (savings < 5000) return [];
+    if (savings < 5000) return []; // at least 50 ETB savings
     final catName = context.categoryNames[top.key] ?? 'Unknown';
     return [
       Insight(

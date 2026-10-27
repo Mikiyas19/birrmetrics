@@ -12,12 +12,10 @@ class InsightsNotifier extends StateNotifier<AsyncValue<List<Insight>>> {
   }
 
   Future<void> load() async {
-    // Keep existing data if we have it to prevent UI flashes
     final current = state.valueOrNull;
     if (current == null) {
       state = const AsyncLoading();
     }
-
     try {
       final insights = await _repo.getRecentInsights();
       state = AsyncData(insights);
@@ -30,7 +28,10 @@ class InsightsNotifier extends StateNotifier<AsyncValue<List<Insight>>> {
     }
   }
 
+  /// Add new insights from the engine. Attach the data signature so future
+  /// evaluations can detect when data has changed.
   Future<void> addInsights(List<Insight> insights) async {
+    // Note: signature is already in the payload if the rule set one
     for (final insight in insights) {
       await _repo.insertInsight(insight);
     }

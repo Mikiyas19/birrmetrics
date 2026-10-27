@@ -22,7 +22,6 @@ class InsightEngine {
         final candidates = rule.evaluate(context);
         for (final insight in candidates) {
           if (_shouldFire(insight, rule, context)) {
-            // Attach expiresAt based on rule
             final withExpiry = Insight(
               id: insight.id,
               ruleKey: insight.ruleKey,
@@ -54,22 +53,24 @@ class InsightEngine {
     for (final existing in _existingInsights) {
       if (existing.ruleKey != insight.ruleKey) continue;
 
-      // If the data signature changed, allow re-firing
+      // If the data signature changed (e.g., user spent more money),
+      // allow the rule to fire again with fresh numbers.
       final existingSig = existing.payload?['_sig'] as String? ?? '';
       if (currentSignature.isNotEmpty && currentSignature != existingSig) {
-        return true; // Data changed → fire again
+        return true;
       }
 
+      // Otherwise apply deduplication window
       final elapsed = now.difference(existing.triggeredAt);
       switch (rule.dedupeWindow) {
         case 'once_per_day':
-          if (elapsed.inHours < 6) return false; // Reduced from 1 day to 6 hours
+          if (elapsed.inHours < 6) return false;
           break;
         case 'once_per_week':
-          if (elapsed.inDays < 3) return false; // Reduced from 7 to 3
+          if (elapsed.inDays < 3) return false;
           break;
         case 'once_per_month':
-          if (elapsed.inDays < 7) return false; // Reduced from 30 to 7
+          if (elapsed.inDays < 7) return false;
           break;
         case 'always':
           break;

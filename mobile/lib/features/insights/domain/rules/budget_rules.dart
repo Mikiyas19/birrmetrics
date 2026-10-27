@@ -3,7 +3,6 @@ import 'package:birrmetrics/features/insights/domain/entities/insight.dart';
 import 'package:birrmetrics/features/insights/domain/rules/insight_context.dart';
 import 'package:birrmetrics/features/insights/domain/rules/insight_rule.dart';
 
-/// Fires when user has expenses but no budget set.
 class BudgetNotSetRule extends InsightRule {
   @override
   String get key => 'BUDGET_NOT_SET';
@@ -12,14 +11,17 @@ class BudgetNotSetRule extends InsightRule {
   String get dedupeWindow => 'once_per_week';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (ctx.hasBudget || !ctx.hasExpenses) return [];
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    if (context.hasBudget || !context.hasExpenses) return [];
     return [
       Insight(
         ruleKey: key,
         severity: InsightSeverity.info,
         title: 'Set a monthly budget',
-        message: 'You\'ve spent ${MoneyFormatter.formatSantim(ctx.totalSpentThisMonth)} this month '
+        message: 'You\'ve spent ${MoneyFormatter.formatSantim(context.totalSpentThisMonth)} this month '
             'but haven\'t set a budget. Setting one helps you stay on track.',
         triggeredAt: DateTime.now(),
       ),
@@ -27,7 +29,6 @@ class BudgetNotSetRule extends InsightRule {
   }
 }
 
-/// Fires once when budget crosses 50%.
 class Budget50PctRule extends InsightRule {
   @override
   String get key => 'BUDGET_50_PCT';
@@ -36,9 +37,12 @@ class Budget50PctRule extends InsightRule {
   String get dedupeWindow => 'once_per_month';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (!ctx.hasBudget) return [];
-    final pct = ctx.budgetUsedPercent;
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    if (!context.hasBudget) return [];
+    final pct = context.budgetUsedPercent;
     if (pct < 50 || pct >= 80) return [];
     return [
       Insight(
@@ -46,14 +50,13 @@ class Budget50PctRule extends InsightRule {
         severity: InsightSeverity.info,
         title: 'Halfway through your budget',
         message: 'You\'ve used ${pct.toStringAsFixed(0)}% of your monthly budget. '
-            'You have ${MoneyFormatter.formatSantim(ctx.monthlyBudgetSantim - ctx.totalSpentThisMonth)} left.',
+            'You have ${MoneyFormatter.formatSantim(context.monthlyBudgetSantim - context.totalSpentThisMonth)} left.',
         triggeredAt: DateTime.now(),
       ),
     ];
   }
 }
 
-/// Fires once when budget crosses 80%.
 class Budget80PctRule extends InsightRule {
   @override
   String get key => 'BUDGET_80_PCT';
@@ -62,9 +65,12 @@ class Budget80PctRule extends InsightRule {
   String get dedupeWindow => 'once_per_day';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (!ctx.hasBudget) return [];
-    final pct = ctx.budgetUsedPercent;
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    if (!context.hasBudget) return [];
+    final pct = context.budgetUsedPercent;
     if (pct < 80 || pct >= 100) return [];
     return [
       Insight(
@@ -72,14 +78,13 @@ class Budget80PctRule extends InsightRule {
         severity: InsightSeverity.warning,
         title: 'Careful — 80% of budget used',
         message: 'You\'ve used ${pct.toStringAsFixed(0)}% of your monthly budget. '
-            'Only ${MoneyFormatter.formatSantim(ctx.monthlyBudgetSantim - ctx.totalSpentThisMonth)} left for ${ctx.daysInMonth - ctx.daysElapsed} days.',
+            'Only ${MoneyFormatter.formatSantim(context.monthlyBudgetSantim - context.totalSpentThisMonth)} left for ${context.daysInMonth - context.daysElapsed} days.',
         triggeredAt: DateTime.now(),
       ),
     ];
   }
 }
 
-/// Fires when budget is exceeded.
 class BudgetExceededRule extends InsightRule {
   @override
   String get key => 'BUDGET_100_PCT';
@@ -88,11 +93,14 @@ class BudgetExceededRule extends InsightRule {
   String get dedupeWindow => 'once_per_day';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (!ctx.hasBudget) return [];
-    final pct = ctx.budgetUsedPercent;
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    if (!context.hasBudget) return [];
+    final pct = context.budgetUsedPercent;
     if (pct < 100) return [];
-    final overBy = ctx.totalSpentThisMonth - ctx.monthlyBudgetSantim;
+    final overBy = context.totalSpentThisMonth - context.monthlyBudgetSantim;
     return [
       Insight(
         ruleKey: key,
@@ -106,7 +114,6 @@ class BudgetExceededRule extends InsightRule {
   }
 }
 
-/// Predicts end-of-month spending pace.
 class BudgetProjectionRule extends InsightRule {
   @override
   String get key => 'BUDGET_PROJECTED_OVERRUN';
@@ -115,11 +122,19 @@ class BudgetProjectionRule extends InsightRule {
   String get dedupeWindow => 'once_per_week';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (!ctx.hasBudget || ctx.daysElapsed < 5) return [];
-    final projected = ctx.projectedMonthlySpend;
-    if (projected <= ctx.monthlyBudgetSantim) return [];
-    final overBy = projected - ctx.monthlyBudgetSantim;
+  String getDataSignature(InsightContext context) {
+    return '${context.projectedMonthlySpend}';
+  }
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    // Do not predict if there are not enough active days
+    if (!context.hasBudget || context.activeDaysInMonth < 5) return [];
+
+    final projected = context.projectedMonthlySpend;
+    if (projected <= context.monthlyBudgetSantim) return [];
+
+    final overBy = projected - context.monthlyBudgetSantim;
     return [
       Insight(
         ruleKey: key,
@@ -133,7 +148,6 @@ class BudgetProjectionRule extends InsightRule {
   }
 }
 
-/// Positive reinforcement when on track.
 class BudgetOnTrackRule extends InsightRule {
   @override
   String get key => 'BUDGET_ON_TRACK';
@@ -142,11 +156,15 @@ class BudgetOnTrackRule extends InsightRule {
   String get dedupeWindow => 'once_per_week';
 
   @override
-  List<Insight> evaluate(InsightContext ctx) {
-    if (!ctx.hasBudget || ctx.daysElapsed < 10 || ctx.hasExpenses == false) return [];
-    final projected = ctx.projectedMonthlySpend;
-    if (projected >= ctx.monthlyBudgetSantim) return [];
-    final saving = ctx.monthlyBudgetSantim - projected;
+  String getDataSignature(InsightContext context) => '';
+
+  @override
+  List<Insight> evaluate(InsightContext context) {
+    // Require at least 5 active days to judge if the user is on track
+    if (!context.hasBudget || context.activeDaysInMonth < 5) return [];
+    final projected = context.projectedMonthlySpend;
+    if (projected >= context.monthlyBudgetSantim) return [];
+    final saving = context.monthlyBudgetSantim - projected;
     return [
       Insight(
         ruleKey: key,
