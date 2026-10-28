@@ -14,6 +14,7 @@ import 'package:birrmetrics/features/insights/domain/rules/insight_context.dart'
 import 'package:birrmetrics/features/insights/domain/rules/rule_registry.dart';
 import 'package:birrmetrics/features/insights/presentation/providers/insight_providers.dart';
 import 'package:birrmetrics/features/insights/presentation/widgets/insight_feed.dart';
+import 'package:birrmetrics/features/reminders/presentation/screens/reminders_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -95,7 +96,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final newInsights = engine.evaluate(ctx);
 
       if (newInsights.isNotEmpty) {
-        // Enrich insights with data signatures for the engine's deduplication
         final signatureMap = <String, String>{};
         for (final rule in allInsightRules) {
           signatureMap[rule.key] = rule.getDataSignature(ctx);
@@ -115,7 +115,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         await ref.read(insightsProvider.notifier).addInsights(enriched);
       }
 
-      // Cleanup stale "Welcome" insight when it's no longer the first expense
       final newKeys = newInsights.map((i) => i.ruleKey).toSet();
       for (final old in existingInsights) {
         if (old.ruleKey == 'FIRST_EXPENSE' && !newKeys.contains('FIRST_EXPENSE')) {
@@ -132,7 +131,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final expenseState = ref.watch(expensesProvider);
     final insightsAsync = ref.watch(insightsProvider);
 
-    // Re-evaluate when expenses or debts change
     ref.listen(expensesProvider, (previous, next) {
       if (next.list is AsyncData && previous?.list != next.list) {
         _evaluateInsights();
@@ -145,7 +143,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
+      appBar: AppBar(
+        title: const Text('Dashboard'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RemindersScreen()),
+              );
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await showModalBottomSheet(
@@ -167,18 +178,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             bottom: 120,
           ),
           children: [
-            // 1. Insight Feed
             insightsAsync.when(
               data: (insights) => InsightFeed(insights: insights),
               loading: () => const SizedBox.shrink(),
               error: (_, __) => const SizedBox.shrink(),
             ),
-
-            // 2. Budget Progress Card
             const BudgetProgressCard(),
             const SizedBox(height: AppSpacing.lg),
-
-            // 3. Total Spent Summary
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
@@ -206,12 +212,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-
-            // 4. Recent Transactions
             Text('Recent Transactions',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: AppSpacing.md),
-
             expenseState.list.when(
               data: (expenses) =>
                   RecentExpensesList(expenses: expenses, shrinkWrap: true),
