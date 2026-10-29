@@ -33,17 +33,15 @@ class DebtRepository {
 
   Future<void> partialRepay(int debtId, int repayAmountSantim, DateTime repaymentDate) async {
     final db = await _db;
-
+    
     final maps = await db.query('debts', where: 'id = ?', whereArgs: [debtId]);
     if (maps.isEmpty) return;
     final debt = DebtModel.fromMap(maps.first);
 
-    // DATA SAFETY 1: Clamp date to be >= debt creation date
     final safeRepaymentDate = repaymentDate.isBefore(debt.createdAt)
         ? debt.createdAt
         : repaymentDate;
 
-    // DATA SAFETY 2: Clamp amount to remaining balance
     final clampedRepayAmountSantim = repayAmountSantim > debt.remainingSantim
         ? debt.remainingSantim
         : repayAmountSantim;
@@ -80,8 +78,7 @@ class DebtRepository {
 
   Future<void> settleDebt(int debtId) async {
     final db = await _db;
-
-    // Settle uses today's date
+    
     final maps = await db.query('debts', where: 'id = ?', whereArgs: [debtId]);
     if (maps.isNotEmpty) {
       final debt = DebtModel.fromMap(maps.first);
@@ -143,7 +140,7 @@ class DebtRepository {
       clientUpdatedAt: DateTime.now(),
       createdAt: debt.createdAt,
     );
-
+    
     await db.update(
       'debts',
       model.toMap(),
@@ -163,6 +160,27 @@ class DebtRepository {
       },
       where: 'id = ?',
       whereArgs: [debtId],
+    );
+  }
+
+  // SYNC: Get all debts that haven't been synced yet
+  Future<List<Map<String, dynamic>>> getUnsyncedDebts() async {
+    final db = await _db;
+    return await db.query(
+      'debts',
+      where: 'is_synced = 0 AND deleted_at IS NULL',
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  // SYNC: Mark a batch of debts as synced
+  Future<void> markDebtsAsSynced(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await _db;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.rawUpdate(
+      'UPDATE debts SET is_synced = 1, sync_status = ? WHERE id IN ($placeholders)',
+      ['synced', ...ids],
     );
   }
 }

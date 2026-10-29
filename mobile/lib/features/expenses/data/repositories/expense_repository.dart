@@ -25,8 +25,8 @@ class ExpenseRepository {
 
   Future<List<Expense>> getAllExpenses() async {
     final db = await _db;
-
-    // NEW: JOIN query to get category name and icon
+    
+    // JOIN query to get category name and icon
     final maps = await db.rawQuery('''
       SELECT e.*, c.name as category_name, c.icon as category_icon
       FROM expenses e
@@ -59,11 +59,32 @@ class ExpenseRepository {
     final db = await _db;
     final now = DateTime.now();
     final startOfMonth = DateTime(now.year, now.month, 1).toIso8601String();
-
+    
     final result = await db.rawQuery(
       'SELECT SUM(amount_santim) as total FROM expenses WHERE expense_date >= ? AND deleted_at IS NULL',
       [startOfMonth],
     );
     return (result.first['total'] as int?) ?? 0;
+  }
+
+  // SYNC: Get all expenses that haven't been synced yet
+  Future<List<Map<String, dynamic>>> getUnsyncedExpenses() async {
+    final db = await _db;
+    return await db.query(
+      'expenses',
+      where: 'is_synced = 0 AND deleted_at IS NULL',
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  // SYNC: Mark a batch of expenses as synced
+  Future<void> markExpensesAsSynced(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await _db;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.rawUpdate(
+      'UPDATE expenses SET is_synced = 1, sync_status = ? WHERE id IN ($placeholders)',
+      ['synced', ...ids],
+    );
   }
 }

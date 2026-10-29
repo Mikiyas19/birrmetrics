@@ -16,6 +16,7 @@ import 'package:birrmetrics/features/insights/domain/rules/rule_registry.dart';
 import 'package:birrmetrics/features/insights/presentation/providers/insight_providers.dart';
 import 'package:birrmetrics/features/insights/presentation/widgets/insight_feed.dart';
 import 'package:birrmetrics/features/reminders/presentation/screens/reminders_screen.dart';
+import 'package:birrmetrics/features/sync/presentation/providers/sync_provider.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -171,6 +172,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Dashboard'),
         actions: [
+          // SYNC BUTTON
+          Consumer(
+            builder: (context, ref, _) {
+              final syncState = ref.watch(syncStateProvider);
+              return IconButton(
+                icon: syncState.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync),
+                onPressed: syncState.isLoading
+                    ? null
+                    : () async {
+                        await ref.read(syncStateProvider.notifier).syncNow();
+                        final state = ref.read(syncStateProvider);
+                        if (context.mounted) {
+                          state.whenOrNull(
+                            data: (msg) {
+                              if (msg != null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(msg)),
+                                );
+                              }
+                            },
+                            error: (e, _) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(e.toString())),
+                              );
+                            },
+                          );
+                        }
+                      },
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () {

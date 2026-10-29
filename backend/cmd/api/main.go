@@ -15,16 +15,21 @@ import (
 func main() {
 	log.Println("Starting BirrMetrics API...")
 
+	// 1. Load Config
 	cfg := config.LoadConfig()
 
+	// 2. Connect to Database
 	pool := database.ConnectDB(cfg.DBUrl)
 	defer pool.Close()
 
+	// 3. Initialize Repositories & Services
 	userRepo := repo.NewUserRepo(pool)
 	userSvc := service.NewUserService(userRepo)
 
-	router := server.New(cfg, userSvc)
+	// 4. Setup Router
+	router := server.New(cfg, userSvc, pool)
 
+	// 5. Start Server
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Printf("🚀 Server running on http://localhost%s", addr)
 

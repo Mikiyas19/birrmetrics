@@ -5,13 +5,16 @@ import (
 
 	"github.com/birrmetrics/birrmetrics-api/internal/auth"
 	"github.com/birrmetrics/birrmetrics-api/internal/config"
+	sync_handler "github.com/birrmetrics/birrmetrics-api/internal/sync/handler"
+	sync_service "github.com/birrmetrics/birrmetrics-api/internal/sync/service"
 	"github.com/birrmetrics/birrmetrics-api/internal/users/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func New(cfg *config.Config, userSvc *service.UserService) *chi.Mux {
+func New(cfg *config.Config, userSvc *service.UserService, db *pgxpool.Pool) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Standard middleware
@@ -35,7 +38,11 @@ func New(cfg *config.Config, userSvc *service.UserService) *chi.Mux {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Initialize handlers
 	authHandler := auth.NewHandler(cfg, userSvc)
+
+	syncSvc := sync_service.NewSyncService(db)
+	syncHandler := sync_handler.NewSyncHandler(syncSvc)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public auth routes
@@ -44,11 +51,16 @@ func New(cfg *config.Config, userSvc *service.UserService) *chi.Mux {
 			r.Post("/login", authHandler.Login)
 		})
 
-		// Protected routes
+		// Protected routes (require JWT)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(cfg.JWTAccessSecret))
+
+			// Auth verification
 			r.Get("/auth/me", authHandler.Me)
-			// (sync routes will go here in step 5.4)
+
+			// Sync endpoints
+			r.Post("/sync/batch", syncHandler.Push)
+			r.Get("/sync/pull", syncHandler.Pull)
 		})
 	})
 
