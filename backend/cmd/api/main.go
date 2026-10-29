@@ -3,24 +3,32 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/birrmetrics/birrmetrics-api/internal/config"
 	"github.com/birrmetrics/birrmetrics-api/internal/database"
+	"github.com/birrmetrics/birrmetrics-api/internal/server"
+	"github.com/birrmetrics/birrmetrics-api/internal/users/repo"
+	"github.com/birrmetrics/birrmetrics-api/internal/users/service"
 )
 
 func main() {
 	log.Println("Starting BirrMetrics API...")
 
-	// 1. Load Config
 	cfg := config.LoadConfig()
 
-	// 2. Connect to Database
-	dbPool := database.ConnectDB(cfg.DBUrl)
-	defer dbPool.Close()
+	pool := database.ConnectDB(cfg.DBUrl)
+	defer pool.Close()
 
-	// 3. Start HTTP Server (Placeholder for now)
-	fmt.Printf("🚀 Server running on port %s\n", cfg.Port)
+	userRepo := repo.NewUserRepo(pool)
+	userSvc := service.NewUserService(userRepo)
 
-	// We will replace this with the actual HTTP router in the next step
-	select {}
+	router := server.New(cfg, userSvc)
+
+	addr := fmt.Sprintf(":%s", cfg.Port)
+	log.Printf("🚀 Server running on http://localhost%s", addr)
+
+	if err := http.ListenAndServe(addr, router); err != nil {
+		log.Fatalf("Server error: %v", err)
+	}
 }

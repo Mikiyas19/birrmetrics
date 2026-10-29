@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:birrmetrics/core/theme/app_spacing.dart';
 import 'package:birrmetrics/core/utils/money_formatter.dart';
+import 'package:birrmetrics/features/auth/presentation/providers/auth_provider.dart';
 import 'package:birrmetrics/features/budget/presentation/providers/budget_provider.dart';
 import 'package:birrmetrics/features/budget/presentation/widgets/budget_progress_card.dart';
 import 'package:birrmetrics/features/dashboard/presentation/widgets/recent_expenses_list.dart';
@@ -126,6 +127,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will be logged out of BirrMetrics. Your local data will remain on this device.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(authStateProvider.notifier).logout();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final expenseState = ref.watch(expensesProvider);
@@ -154,6 +179,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 MaterialPageRoute(builder: (_) => const RemindersScreen()),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _confirmLogout,
           ),
         ],
       ),
@@ -197,8 +226,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       data: (santim) => Text(
                         MoneyFormatter.formatSantim(santim),
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
                       loading: () => const SizedBox(
                         width: 20,
