@@ -9,7 +9,9 @@ import 'package:birrmetrics/features/expenses/domain/entities/expense.dart';
 import 'package:birrmetrics/features/expenses/presentation/providers/expense_providers.dart';
 
 class AddExpenseSheet extends ConsumerStatefulWidget {
-  const AddExpenseSheet({super.key});
+  final Expense? existingExpense;
+
+  const AddExpenseSheet({super.key, this.existingExpense});
 
   @override
   ConsumerState<AddExpenseSheet> createState() => _AddExpenseSheetState();
@@ -19,7 +21,19 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   final _amountController = TextEditingController();
   final _descController = TextEditingController();
   int? _selectedCategoryId;
-  DateTime _selectedDate = DateTime.now(); // NEW: Track the expense date
+  DateTime _selectedDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingExpense != null) {
+      final e = widget.existingExpense!;
+      _amountController.text = (e.amountSantim / 100).toStringAsFixed(2);
+      _descController.text = e.description ?? '';
+      _selectedCategoryId = e.categoryId;
+      _selectedDate = e.expenseDate;
+    }
+  }
 
   @override
   void dispose() {
@@ -32,11 +46,8 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      // Allow recording expenses from up to 2 years ago
       firstDate: DateTime(DateTime.now().year - 2),
-      // Cannot log an expense in the future
       lastDate: DateTime.now(),
-      helpText: 'When did this expense happen?',
     );
     if (picked != null) {
       setState(() => _selectedDate = picked);
@@ -100,15 +111,21 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     }
 
     final expense = Expense(
+      id: widget.existingExpense?.id,
       categoryId: _selectedCategoryId!,
       amountSantim: MoneyFormatter.toSantim(amount),
-      expenseDate: _selectedDate, // Use the selected date
+      expenseDate: _selectedDate,
       description: _descController.text.trim().isEmpty ? null : _descController.text.trim(),
       clientUpdatedAt: DateTime.now(),
-      createdAt: DateTime.now(),
+      createdAt: widget.existingExpense?.createdAt ?? DateTime.now(),
     );
 
-    await ref.read(expensesProvider.notifier).addExpense(expense);
+    if (widget.existingExpense == null) {
+      await ref.read(expensesProvider.notifier).addExpense(expense);
+    } else {
+      await ref.read(expensesProvider.notifier).updateExpense(expense);
+    }
+
     if (mounted) Navigator.pop(context);
   }
 
@@ -116,6 +133,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final categoriesAsync = ref.watch(categoriesProvider);
+    final isEditing = widget.existingExpense != null;
 
     return categoriesAsync.when(
       loading: () => const Center(
@@ -126,7 +144,6 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
       ),
       error: (err, _) => Center(child: Text('Error: $err')),
       data: (categories) {
-        // Default to first category if none selected
         if (_selectedCategoryId == null && categories.isNotEmpty) {
           _selectedCategoryId = categories.first.id;
         }
@@ -142,7 +159,11 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Add Expense', style: Theme.of(context).textTheme.headlineMedium, textAlign: TextAlign.center),
+              Text(
+                isEditing ? 'Edit Expense' : 'Add Expense',
+                style: Theme.of(context).textTheme.headlineMedium,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: AppSpacing.lg),
 
               TextField(
@@ -158,7 +179,6 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // NEW: Date Picker Row
               InkWell(
                 onTap: _pickDate,
                 borderRadius: BorderRadius.circular(12),
@@ -224,7 +244,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
 
               FilledButton(
                 onPressed: _submit,
-                child: const Text('Save Expense'),
+                child: Text(isEditing ? 'Save Changes' : 'Save Expense'),
               ),
             ],
           ),

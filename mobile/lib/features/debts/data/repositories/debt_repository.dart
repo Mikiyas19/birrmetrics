@@ -33,7 +33,7 @@ class DebtRepository {
 
   Future<void> partialRepay(int debtId, int repayAmountSantim, DateTime repaymentDate) async {
     final db = await _db;
-    
+
     final maps = await db.query('debts', where: 'id = ?', whereArgs: [debtId]);
     if (maps.isEmpty) return;
     final debt = DebtModel.fromMap(maps.first);
@@ -62,6 +62,7 @@ class DebtRepository {
         'remaining_santim': newRemaining,
         'status': newStatus,
         'client_updated_at': DateTime.now().toIso8601String(),
+        'is_synced': 0, // FIX: Mark as unsynced
         'sync_status': 'pending',
       },
       where: 'id = ?',
@@ -78,7 +79,7 @@ class DebtRepository {
 
   Future<void> settleDebt(int debtId) async {
     final db = await _db;
-    
+
     final maps = await db.query('debts', where: 'id = ?', whereArgs: [debtId]);
     if (maps.isNotEmpty) {
       final debt = DebtModel.fromMap(maps.first);
@@ -98,6 +99,7 @@ class DebtRepository {
         'remaining_santim': 0,
         'status': 'settled',
         'client_updated_at': DateTime.now().toIso8601String(),
+        'is_synced': 0, // FIX: Mark as unsynced
         'sync_status': 'pending',
       },
       where: 'id = ?',
@@ -140,7 +142,7 @@ class DebtRepository {
       clientUpdatedAt: DateTime.now(),
       createdAt: debt.createdAt,
     );
-    
+
     await db.update(
       'debts',
       model.toMap(),
@@ -155,6 +157,7 @@ class DebtRepository {
       'debts',
       {
         'deleted_at': DateTime.now().toIso8601String(),
+        'is_synced': 0, // FIX: Mark as unsynced
         'sync_status': 'pending',
         'client_updated_at': DateTime.now().toIso8601String(),
       },
@@ -163,17 +166,15 @@ class DebtRepository {
     );
   }
 
-  // SYNC: Get all debts that haven't been synced yet
   Future<List<Map<String, dynamic>>> getUnsyncedDebts() async {
     final db = await _db;
     return await db.query(
       'debts',
-      where: 'is_synced = 0 AND deleted_at IS NULL',
+      where: 'is_synced = 0',
       orderBy: 'created_at ASC',
     );
   }
 
-  // SYNC: Mark a batch of debts as synced
   Future<void> markDebtsAsSynced(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await _db;
@@ -182,5 +183,29 @@ class DebtRepository {
       'UPDATE debts SET is_synced = 1, sync_status = ? WHERE id IN ($placeholders)',
       ['synced', ...ids],
     );
+  }
+
+  Future<bool> insertPulledDebt(Map<String, dynamic> data) async {
+    final db = await _db;
+
+    final existing = await db.query('debts', where: 'id = ?', whereArgs: [data['id']]);
+    if (existing.isNotEmpty) return false;
+
+    await db.insert('debts', {
+      'id': data['id'],
+      'user_id': 1,
+      'counterparty': data['counterparty'],
+      'amount_santim': data['amount_santim'],
+      'remaining_santim': data['remaining_santim'],
+      'is_lent': data['is_lent'] == true ? 1 : 0,
+      'due_date': data['due_date'],
+      'status': data['status'],
+      'is_synced': 1,
+      'sync_status': 'synced',
+      'client_updated_at': data['client_updated_at'] ?? DateTime.now().toIso8601String(),
+      'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
+      'deleted_at': data['deleted_at'],
+    });
+    return true;
   }
 }

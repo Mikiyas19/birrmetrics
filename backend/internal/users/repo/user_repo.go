@@ -26,8 +26,14 @@ func NewUserRepo(db *pgxpool.Pool) *UserRepo {
 }
 
 func (r *UserRepo) Create(ctx context.Context, email, passwordHash, fullName string) (*User, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
 	var u User
-	err := r.db.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO users (email, password_hash, full_name)
 		 VALUES ($1, $2, $3)
 		 RETURNING id, email, password_hash, COALESCE(full_name, ''), created_at`,
@@ -36,6 +42,27 @@ func (r *UserRepo) Create(ctx context.Context, email, passwordHash, fullName str
 	if err != nil {
 		return nil, err
 	}
+
+	// Auto-seed default categories for the new user
+	_, err = tx.Exec(ctx, `
+		INSERT INTO categories (user_id, name, icon, color, is_system, is_deletable) VALUES
+		($1, 'Food', '🍔', '#F2A65A', TRUE, FALSE),
+		($1, 'Transport', '🚌', '#3B82F6', TRUE, FALSE),
+		($1, 'Education', '📚', '#8B5CF6', TRUE, FALSE),
+		($1, 'Fun', '🎬', '#EC4899', TRUE, FALSE),
+		($1, 'Health', '💊', '#E04F5F', TRUE, FALSE),
+		($1, 'Bills', '🧾', '#F59E0B', TRUE, FALSE),
+		($1, 'Other', '🏷️', '#8B97A5', TRUE, FALSE)`,
+		u.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
 	return &u, nil
 }
 

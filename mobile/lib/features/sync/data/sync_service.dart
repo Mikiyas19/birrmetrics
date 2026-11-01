@@ -14,66 +14,72 @@ class SyncService {
   final _expenseRepo = ExpenseRepository();
   final _debtRepo = DebtRepository();
 
-  /// Pushes unsynced local records to the server.
-  /// Returns a summary string (e.g. "5 items synced").
-  Future<String> pushChanges() async {
+  Future<String> fullSync() async {
     final token = await SecureStorage.getToken();
     if (token == null) throw Exception('Not authenticated');
 
-    // 1. Fetch unsynced records
+    // 1. PUSH local changes
     final unsyncedExpenses = await _expenseRepo.getUnsyncedExpenses();
     final unsyncedDebts = await _debtRepo.getUnsyncedDebts();
 
-    final totalCount = unsyncedExpenses.length + unsyncedDebts.length;
-    if (totalCount == 0) return 'Nothing to sync';
+    final pushCount = unsyncedExpenses.length + unsyncedDebts.length;
 
-    // 2. Build the payload
-    final payload = {
-      'expenses': unsyncedExpenses,
-      'debts': unsyncedDebts,
-    };
+    if (pushCount > 0) {
+      // Ensure is_lent is sent as a boolean
+      final formattedDebts = unsyncedDebts.map((d) {
+        return {
+          ...d,
+          'is_lent': (d['is_lent'] as int) == 1,
+        };
+      }).toList();
 
-    // 3. Send to backend
-    try {
-      await _dio.post(
-        '/sync/batch',
-        data: payload,
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
-      );
-    } on DioException catch (e) {
-      throw Exception('Sync failed: ${e.response?.data ?? e.message}');
+      final payload = {
+        'expenses': unsyncedExpenses,
+        'debts': formattedDebts,
+      };
+
+      try {
+        await _dio.post(
+          '/sync/batch',
+          data: payload,
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+      } on DioException catch (e) {
+        throw Exception('Push failed: ${e.response?.data ?? e.message}');
+      }
+
+      final expenseIds = unsyncedExpenses.map((e) => e['id'] as int).toList();
+      final debtIds = unsyncedDebts.map((d) => d['id'] as int).toList();
+
+      await _expenseRepo.markExpensesAsSynced(expenseIds);
+      await _debtRepo.markDebtsAsSynced(debtIds);
     }
 
-    // 4. Mark records as synced locally
-    final expenseIds = unsyncedExpenses.map((e) => e['id'] as int).toList();
-    final debtIds = unsyncedDebts.map((d) => d['id'] as int).toList();
-
-    await _expenseRepo.markExpensesAsSynced(expenseIds);
-    await _debtRepo.markDebtsAsSynced(debtIds);
-
-    return '$totalCount item${totalCount == 1 ? '' : 's'} synced';
-  }
-
-  /// Pulls remote changes created after a given timestamp.
-  Future<int> pullChanges({DateTime? since}) async {
-    final token = await SecureStorage.getToken();
-    if (token == null) throw Exception('Not authenticated');
-
-    final sinceParam = since?.toUtc().toIso8601String() ?? '';
-
+    // 2. PULL remote changes
+    int pullCount = 0;
     try {
       final res = await _dio.get(
         '/sync/pull',
-        queryParameters: {'since': sinceParam},
+        queryParameters: {'since': ''},
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
 
       final expenses = res.data['expenses'] as List<dynamic>? ?? [];
       final debts = res.data['debts'] as List<dynamic>? ?? [];
 
-      return expenses.length + debts.length;
+      for (final e in expenses) {
+        final isNew = await _expenseRepo.insertPulledExpense(Map<String, dynamic>.from(e));
+        if (isNew) pullCount++;
+      }
+
+      for (final d in debts) {
+        final isNew = await _debtRepo.insertPulledDebt(Map<String, dynamic>.from(d));
+        if (isNew) pullCount++;
+      }
     } on DioException catch (e) {
       throw Exception('Pull failed: ${e.response?.data ?? e.message}');
     }
+
+    return 'Pushed $pushCount, Pulled $pullCount';
   }
 }

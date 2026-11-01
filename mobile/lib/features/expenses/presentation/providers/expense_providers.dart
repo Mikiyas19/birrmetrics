@@ -27,7 +27,17 @@ class ExpensesNotifier extends StateNotifier<ExpensesState> {
 
   Future<void> addExpense(Expense expense) async {
     await _repo.addExpense(expense);
-    await loadAll(); // Reload automatically after saving!
+    await loadAll();
+  }
+
+  Future<void> updateExpense(Expense expense) async {
+    await _repo.updateExpense(expense);
+    await loadAll();
+  }
+
+  Future<void> deleteExpense(int expenseId) async {
+    await _repo.deleteExpense(expenseId);
+    await loadAll();
   }
 }
 
