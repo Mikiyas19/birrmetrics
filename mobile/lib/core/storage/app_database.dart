@@ -18,7 +18,7 @@ class AppDatabase {
 
     return await openDatabase(
       path,
-      version: 3, // Bumped to 3 for repayments table
+      version: 3,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -30,7 +30,6 @@ class AppDatabase {
   static Future<void> _createDB(Database db, int version) async {
     debugPrint('Creating database tables...');
 
-    // 1. Users
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +44,6 @@ class AppDatabase {
       )
     ''');
 
-    // 2. Categories
     await db.execute('''
       CREATE TABLE categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +58,6 @@ class AppDatabase {
       )
     ''');
 
-    // 3. Expenses
     await db.execute('''
       CREATE TABLE expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,7 +77,6 @@ class AppDatabase {
     await db.execute('CREATE INDEX idx_exp_user_date ON expenses(user_id, expense_date DESC)');
     await db.execute('CREATE INDEX idx_exp_user_cat ON expenses(user_id, category_id)');
 
-    // 4. Debts
     await db.execute('''
       CREATE TABLE debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +98,6 @@ class AppDatabase {
     ''');
     await db.execute('CREATE INDEX idx_debt_user_status ON debts(user_id, status)');
 
-    // 5. Repayments (NEW)
     await db.execute('''
       CREATE TABLE repayments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,7 +109,6 @@ class AppDatabase {
     ''');
     await db.execute('CREATE INDEX idx_repayment_debt ON repayments(debt_id)');
 
-    // 6. Reminders
     await db.execute('''
       CREATE TABLE reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,7 +128,6 @@ class AppDatabase {
     ''');
     await db.execute('CREATE INDEX idx_rem_next ON reminders(next_trigger_at)');
 
-    // 7. Budgets
     await db.execute('''
       CREATE TABLE budgets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +140,6 @@ class AppDatabase {
       )
     ''');
 
-    // 8. Insights
     await db.execute('''
       CREATE TABLE insights (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,7 +156,6 @@ class AppDatabase {
     ''');
     await db.execute('CREATE INDEX idx_insights_user ON insights(user_id, triggered_at DESC)');
 
-    // 9. Sync Logs
     await db.execute('''
       CREATE TABLE sync_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,13 +176,10 @@ class AppDatabase {
 
   static Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
     debugPrint('Upgrading database from $oldVersion to $newVersion');
-
     if (oldVersion < 2) {
       await SeedData.insertDefaultData(db);
     }
-
     if (oldVersion < 3) {
-      // Add repayments table
       await db.execute('''
         CREATE TABLE repayments (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,5 +192,19 @@ class AppDatabase {
       await db.execute('CREATE INDEX idx_repayment_debt ON repayments(debt_id)');
       debugPrint('Added repayments table.');
     }
+  }
+
+  // NEW: Wipes all user data on logout
+  static Future<void> wipeAllData() async {
+    final db = await instance;
+    await db.delete('expenses');
+    await db.delete('debts');
+    await db.delete('repayments');
+    await db.delete('reminders');
+    await db.delete('budgets');
+    await db.delete('insights');
+    await db.delete('sync_logs');
+    await db.delete('categories', where: 'is_system = 0'); // Keep defaults
+    debugPrint('🗑️ All local data wiped.');
   }
 }
