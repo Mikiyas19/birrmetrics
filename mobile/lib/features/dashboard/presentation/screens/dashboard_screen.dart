@@ -6,6 +6,7 @@ import 'package:birrmetrics/features/auth/presentation/providers/auth_provider.d
 import 'package:birrmetrics/features/budget/presentation/providers/budget_provider.dart';
 import 'package:birrmetrics/features/budget/presentation/widgets/budget_progress_card.dart';
 import 'package:birrmetrics/features/dashboard/presentation/widgets/recent_expenses_list.dart';
+import 'package:birrmetrics/features/dashboard/presentation/widgets/spending_pie_chart.dart'; // NEW
 import 'package:birrmetrics/features/debts/presentation/providers/debt_providers.dart';
 import 'package:birrmetrics/features/expenses/presentation/providers/expense_providers.dart';
 import 'package:birrmetrics/features/expenses/presentation/screens/add_expense_sheet.dart';
@@ -172,40 +173,39 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Dashboard'),
         actions: [
-          // SYNC BUTTON
           Consumer(
             builder: (context, ref, _) {
               final syncState = ref.watch(syncStateProvider);
               return IconButton(
                 icon: syncState.isLoading
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : const Icon(Icons.sync),
                 onPressed: syncState.isLoading
                     ? null
                     : () async {
-                        await ref.read(syncStateProvider.notifier).syncNow();
-                        final state = ref.read(syncStateProvider);
-                        if (context.mounted) {
-                          state.whenOrNull(
-                            data: (msg) {
-                              if (msg != null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(msg)),
-                                );
-                              }
-                            },
-                            error: (e, _) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(e.toString())),
-                              );
-                            },
+                  await ref.read(syncStateProvider.notifier).syncNow();
+                  final state = ref.read(syncStateProvider);
+                  if (context.mounted) {
+                    state.whenOrNull(
+                      data: (msg) {
+                        if (msg != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(msg)),
                           );
                         }
                       },
+                      error: (e, _) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString())),
+                        );
+                      },
+                    );
+                  }
+                },
               );
             },
           ),
@@ -264,8 +264,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       data: (santim) => Text(
                         MoneyFormatter.formatSantim(santim),
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       loading: () => const SizedBox(
                         width: 20,
@@ -279,6 +279,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+
+            // NEW: THE PIE CHART
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: expenseState.list.when(
+                  data: (expenses) {
+                    final now = DateTime.now();
+                    final startOfMonth = DateTime(now.year, now.month, 1);
+                    final monthExpenses = expenses.where((e) => e.expenseDate.isAfter(startOfMonth)).toList();
+                    return SpendingPieChart(expenses: monthExpenses);
+                  },
+                  loading: () => const SizedBox(
+                    height: 200,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (err, _) => Text('Error: $err'),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
             Text('Recent Transactions',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: AppSpacing.md),
